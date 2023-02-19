@@ -103,7 +103,7 @@ var pstSelf = { w: pst_w, b: pst_b };
  */
 function evaluateBoard(game, move, prevSum, color) {
 
-  if (game.in_checkmate()) {
+  if (game.isCheckmate()) {
 
     // Opponent is in checkmate (good for us)
     if (move.color === color) {
@@ -115,12 +115,12 @@ function evaluateBoard(game, move, prevSum, color) {
     }
   }
 
-  if (game.in_draw() || game.in_threefold_repetition() || game.in_stalemate())
+  if (game.isDraw() || game.isThreefoldRepetition() || game.isStalemate())
   {
     return 0;
   }
 
-  if (game.in_check()) {
+  if (game.isCheck()) {
     // Opponent is in check (good for us)
     if (move.color === color) {
       prevSum += 50;

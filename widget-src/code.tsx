@@ -1,11 +1,10 @@
-import { number } from 'prop-types'
-import * as chessLib from './chess.js'
+import * as chessLib from './chess-new'
 import * as chess960Lib from './chess960.js'
 import * as ai from './ai.js'
-import { PIECES_SVG } from './pieces.js'
+import { PIECES_SVG, AVAILABLE_MOVE } from './pieces.js'
 
 const { widget } = figma
-const { Frame, AutoLayout, SVG, Text, useSyncedState, usePropertyMenu, useEffect, waitForTask } = widget
+const { Frame, AutoLayout, SVG, Text, useSyncedState, usePropertyMenu, useEffect, waitForTask, Image, Rectangle } = widget
 
 interface Move {
   from: string,
@@ -14,8 +13,9 @@ interface Move {
 }
 
 function Chess() {
+  const [minigame, setMinigame] = widget.useSyncedState<boolean>("minigame", true)
   const newBoardFen = (): string => {
-    const board = play960 ? new chess960Lib.Chess() : new chessLib.Chess()
+    const board = play960 ? new chess960Lib.Chess() : new chessLib.Chess({minigame})
     return board.fen()
   }
 
@@ -23,52 +23,120 @@ function Chess() {
   const [boardFen, setBoardFen] = widget.useSyncedState<string>("boardFen", newBoardFen())
   // Stores a selected square in algebraic notation.
   const [selected, setSelected] = widget.useSyncedState<string>("selected", null)
+  const [availableMoves, setAvailableMoves] = widget.useSyncedState<chessLib.Move[]>("availableMoves", null)
+  const [showMoves, setShowMoves] = widget.useSyncedState<boolean>("showMoves", true)
   const [computer, setComputer] = widget.useSyncedState<boolean>("computer", false)
   const [promoMove, setPromoMove] = widget.useSyncedState<Move>("promoMove", null)
 
+  const [playerWhite, setPlayerWhite] = useSyncedState<string>('playerWhite', "waiting for player")
+  const [playerBlack, setPlayerBlack] = useSyncedState<string>('playerBlack', "waiting for player")
+  const [playerPhotoWhite, setPlayerPhotoWhite] = useSyncedState<string | null>('playerPhotoWhite', null)
+  const [playerPhotoBlack, setPlayerPhotoBlack] = useSyncedState<string | null>('playerPhotoBlack', null)
 
-  let chess = new chessLib.Chess(boardFen)
+  const resetPlayers = () => {
+    setPlayerWhite('waiting for player');
+    setPlayerBlack('waiting for player');
+    setPlayerPhotoWhite(null);
+    setPlayerPhotoBlack(null);
+  }
+
+  const resetBoard = (m: boolean, fen: string, c: boolean) => {
+    chess.setMinigame(m)
+    setBoardFen(fen)
+    setMinigame(m)
+    setSelected(null)
+    setAvailableMoves(null)
+    resetPlayers()
+    setPromoMove(null)
+    setComputer(c)
+  }
+
+
+  let chess = new chessLib.Chess({fen: boardFen, minigame})
   let board: any[][] = chess.board()
 
   const promoPieces: string[] = ['q', 'r', 'b', 'n']
 
   const propertyMenu: any[] = [
     {
+      tooltip: 'PvP',
+      propertyName: 'reset-pvp',
+      itemType: 'action',
+    },
+    {
+      tooltip: 'BvP',
+      propertyName: 'reset-pvb',
+      itemType: 'action',
+    },
+    {
+      tooltip: 'NvP',
+      propertyName: 'reset-pvn',
+      itemType: 'action',
+    },
+    {
+      tooltip: 'RvP',
+      propertyName: 'reset-pvr',
+      itemType: 'action',
+    },
+    {
+      tooltip: 'KvP',
+      propertyName: 'reset-pvk',
+      itemType: 'action',
+    },
+    {
+      tooltip: 'QvP',
+      propertyName: 'reset-pvq',
+      itemType: 'action',
+    },
+    {
       tooltip: 'New Game (2 Players)',
       propertyName: 'reset',
       itemType: 'action',
-    },
+    }, /*
     {
       tooltip: 'New Chess960 Game (2 Players)',
       propertyName: 'reset960',
       itemType: 'action',
-    },
+    }, */
     {
       tooltip: 'New Game (Against AI)',
       propertyName: 'reset-computer',
+      itemType: 'action',
+    },
+    {
+      tooltip: `${!showMoves ? 'Show' : 'Hide'} Moves`,
+      propertyName: 'toggle',
       itemType: 'action',
     },
   ]
   usePropertyMenu(
     propertyMenu,
     async ({ propertyName }) => {
-      if (propertyName === 'reset') {
-        setBoardFen(newBoardFen())
-        setSelected(null)
-        setPromoMove(null)
-        setComputer(false)
+      if (propertyName === 'reset-pvp') {
+        resetBoard(true, '8/pppppppp/8/8/8/8/PPPPPPPP/8 w - - 0 1', false)
+      } else if (propertyName === 'reset-pvb') {
+        resetBoard(true, '2b2b2/8/8/8/8/8/PPPPPPPP/8 w - - 0 1', false)
+      } else if (propertyName === 'reset-pvr') {
+        resetBoard(true, 'r6r/8/8/8/8/8/PPPPPPPP/8 w - - 0 1', false)
+      } else if (propertyName === 'reset-pvn') {
+        resetBoard(true, '1n4n1/8/8/8/8/8/PPPPPPPP/8 w - - 0 1', false)
+      } else if (propertyName === 'reset-pvk') {
+        resetBoard(true, '4k3/8/8/8/8/8/PPPPPPPP/8 w - - 0 1', false)
+      } else if (propertyName === 'reset-pvq') {
+        resetBoard(true, '3q4/8/8/8/8/8/PPPPPPPP/8 w - - 0 1', false)
+      } else if (propertyName === 'reset') {
+        resetBoard(false, newBoardFen(), false)
       } else if (propertyName === 'reset960') {
         chess = chess960Lib.Chess(generate960StartFen())
         board = chess.board()
-        setBoardFen(chess.fen())
-        setSelected(null)
-        setPromoMove(null)
-        setComputer(false)
+        resetBoard(false, chess.fen(), false)
       } else if (propertyName === 'reset-computer') {
-        setBoardFen(newBoardFen())
-        setSelected(null)
-        setPromoMove(null)
-        setComputer(true)
+        resetBoard(false, newBoardFen(), true)
+      } else if (propertyName === 'toggle') {
+        (selected && !showMoves) ?
+          setAvailableMoves(chess.moves({ returnSquares: true, square: selected as chessLib.Square })) :
+          setAvailableMoves(null)
+        setShowMoves(!showMoves)
       }
     },
   )
@@ -109,16 +177,24 @@ function Chess() {
   }
 
   const endGameCondition: string = (() => {
-    if (chess.in_checkmate()) {
-      return `Checkmate! ${chess.turn() == 'w' ? 'Black' : 'White'} wins.`
-    } else if (chess.in_draw()) {
-      return 'The game is a draw.'
-    } else if (chess.in_stalemate()) {
-      return 'The game is a stalemate.'
-    } else if (chess.in_threefold_repetition()) {
-      return 'The game is a draw by repetition.'
+    if(minigame){
+      if(chess.isInsufficientMaterial()) {
+        return `${chess.turn() == 'w' ? 'Black' : 'White'} wins.`
+      } else {
+        return ''
+      }
     } else {
-      return ''
+      if (chess.isCheckmate()) {
+        return `Checkmate! ${chess.turn() == 'w' ? 'Black' : 'White'} wins.`
+      } else if (chess.isDraw()) {
+        return 'The game is a draw.'
+      } else if (chess.isStalemate()) {
+        return 'The game is a stalemate.'
+      } else if (chess.isThreefoldRepetition()) {
+        return 'The game is a draw by repetition.'
+      } else {
+        return ''
+      }
     }
   })()
 
@@ -143,7 +219,7 @@ function Chess() {
             key={`promo:${color}:${piece}`}
           >
             <SVG
-              src={PIECES_SVG[color][piece]}
+              src={PIECES_SVG[color][piece]()}
               height={50}
               width={50}
             />
@@ -157,9 +233,11 @@ function Chess() {
   // called when selecting a normal move and also 
   // when promoting
   const applyMove = (move: Move) => {
-    if (chess.move(move)) {
+    try {
+      chess.move(move, {strict: false})
       setBoardFen(chess.fen())
       setSelected(null)
+      setAvailableMoves(null)
 
       if (computer) {
         // Playing against AI.
@@ -171,21 +249,27 @@ function Chess() {
             if (chess.move(move)) {
               setBoardFen(chess.fen())
               setSelected(null)
+              setAvailableMoves(null)
               notification.cancel()
             } else {
               // Must be end of game!
+              //figma.notify("End of game?")
             }
             resolve()
           }, 50);
         }))
       }
-    } else {
-      if (chess.in_check()) {
+    } catch(e) {
+      if(e.message === 'No moves') {
+        figma.notify(`No legal moves available to ${chess.turn() === 'w' ? 'black' : 'white'} 😱`, { timeout: 3000 })
+        setBoardFen(chess.fen())
+      } else if (chess.inCheck()) {
         figma.notify("You're in check! 😬", { timeout: 2000 })
       } else {
         figma.notify("Legal moves only, please! 😊", { timeout: 2000 })
       }
       setSelected(null)
+      setAvailableMoves(null)
     }
   }
 
@@ -208,6 +292,7 @@ function Chess() {
     const position = indexToPositionString(row, column)
     if (selected && selected === position) {
       setSelected(null)
+      setAvailableMoves(null)
     } else if (selected) {
       const move = { from: selected, to: position }
       // check if we are in a promo situation
@@ -223,6 +308,26 @@ function Chess() {
       if (board[row][column] && board[row][column].color === chess.turn()) {
         // Only select non-empty cells of the correct color.
         setSelected(position)
+        const moves = chess.moves({ returnSquares: true, square: position as chessLib.Square })
+        if(!moves.length) {
+          figma.notify(`This piece is currently blocked`, { timeout: 2000 })
+        }
+        // only show available moves in the mini games
+        if(showMoves) {
+          setAvailableMoves(moves)
+        }
+
+        if (figma.currentUser) {
+          if(chess.turn() === 'w') {
+            setPlayerWhite(figma.currentUser.name)
+            setPlayerPhotoWhite(figma.currentUser.photoUrl)
+          } else {
+            setPlayerBlack(figma.currentUser.name)
+            setPlayerPhotoBlack(figma.currentUser.photoUrl)
+          }
+        } else {
+          figma.notify("Please login to figma")
+        }  
       } else if (board[row][column]) {
         const color = chess.turn()
         figma.notify(`It's currently ${color === 'b' ? 'black' : 'white'}'s turn`, { timeout: 2000 })
@@ -247,6 +352,8 @@ function Chess() {
     } else {
       flippedBoard = board
     }
+    const photo = color === 'b' ? playerPhotoBlack : playerPhotoWhite;
+    const name = color === 'b'? playerBlack : playerWhite;
 
     return <AutoLayout
       direction={"vertical"}
@@ -263,10 +370,9 @@ function Chess() {
         verticalAlignItems={"center"}
         height={"hug-contents"}
         width={"hug-contents"}
-        cornerRadius={30}
         key={`color:${color}`}
         stroke={"#000000"}
-        strokeWidth={(chess.turn() === color ? 3 : 0)}
+        strokeWidth={(chess.turn() === color ? 5 : 0)}
       >
         {flippedBoard.map((row, rowIndex) => {
           if (flipped) {
@@ -283,7 +389,7 @@ function Chess() {
             {row.map((cell: { type: string, color: string }, columnIndex) => (
               <AutoLayout
                 fill={
-                  selected && selected === indexToPositionString(rowIndex, columnIndex) ? "#F7F586" : (rowIndex + columnIndex) % 2 == 0 ? "#ECEED4" : "#78955B"
+                  selected && selected === indexToPositionString(rowIndex, columnIndex) ? "#9890EC" : (rowIndex + columnIndex) % 2 == 0 ? "#E8EDF9" : "#B7C0D8"
                 }
                 // Cells are only clickable if they contain a piece or we've already
                 // selected a piece.
@@ -297,20 +403,47 @@ function Chess() {
               >
                 {cell ?
                   <SVG
-                    src={PIECES_SVG[cell.color][cell.type]}
+                    src={PIECES_SVG[cell.color][cell.type](availableMoves && availableMoves.indexOf(indexToPositionString(rowIndex, columnIndex)) !== -1)}
                     height={100}
                     width={100}
-                  />
-                  : <Frame
-                    width={100}
-                    height={100}
-                  />}
-
+                  /> :
+                  availableMoves && availableMoves.indexOf(indexToPositionString(rowIndex, columnIndex)) !== -1 ?
+                  <SVG
+                  src={AVAILABLE_MOVE}
+                  height={100}
+                  width={100}
+                  /> :
+                    <Frame
+                      width={100}
+                      height={100}
+                    />}
               </AutoLayout>
             ))}
           </AutoLayout>
         })}
       </AutoLayout>
+      <AutoLayout
+        direction="horizontal"
+        horizontalAlignItems="start"
+        verticalAlignItems="center"
+        height="hug-contents"
+        padding={10}
+      >
+      {photo ? (
+          <Image cornerRadius={60} width={60} height={60} src={photo} />
+        ) : (
+          <Rectangle cornerRadius={60} width={60} height={60} fill="#B7C0D8" />
+        )}
+          <AutoLayout
+            direction="horizontal"
+            horizontalAlignItems="center"
+            verticalAlignItems="center"
+            height="hug-contents"
+            padding={10}
+          >
+            <Text fontSize={30}>{name}</Text>
+          </AutoLayout>
+          </AutoLayout>
     </AutoLayout>
   })
 
@@ -322,10 +455,6 @@ function Chess() {
       height={"hug-contents"}
       width={"hug-contents"}
       padding={10}
-      // stroke={"#AAAAAA"}
-      // strokeWidth={6}
-      // cornerRadius={30}
-      // fill={"#FFFFFF"}
     >
       <AutoLayout
         direction={"horizontal"}
@@ -338,6 +467,7 @@ function Chess() {
       >
         {boards}
       </AutoLayout>
+
       {endGameCondition.length > 0 && (
         <AutoLayout
           width={"fill-parent"}
@@ -352,12 +482,11 @@ function Chess() {
             padding={40}
             cornerRadius={30}
             spacing={120}
-            fill={"#78955B"}
+            fill={"#4ECB71"}
           >
             <Text
               fontSize={70}
               fill={"#FFFFFF"}
-              fontFamily={"Andada"}
             >
               {endGameCondition}
             </Text>
